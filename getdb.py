@@ -42,7 +42,7 @@ with zipfile.ZipFile('l_amat.zip' , 'r') as my_zip:
 	#my_zip.extract('SC.dat' , 'data')
 	#my_zip.extract('SF.dat' , 'data')
 	#my_zip.extract('counts' , 'data')
-
+logIt('Get DB Process Complete!')
 
 
 
