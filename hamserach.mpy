@@ -54,7 +54,7 @@ def checkDB():
 
 
 write("|DFfcchdr.ans|");
-write("                              v.2 ALPHA\n");
+write("                              v.2.1 ALPHA\n");
 write("                          ENTER CALLSIGN: ");
 callsign = getstr(11, 6, 120, "");
 callsign = callsign.upper()
