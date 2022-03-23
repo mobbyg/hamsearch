@@ -1,7 +1,7 @@
 #########################################################
 ##      FCC AMATEUR RADIO CALLSIGN DATABASE LOOKUP     ##
 ##                 a.k.a. "HAMSERACH"                  ##
-##                       v.2 ALPHA                     ##
+##                       v.2.1 ALPHA                   ##
 ##  Copyright (c) 2022, Richard L. Gattie II, KB2MOB   ##
 ##           Distributed under the BSD License         ##
 #########################################################
@@ -13,7 +13,7 @@ import sys
 
 global callsign
 global callsignOpclass
-dbFolder = '/full/path/to/your/hamsearch/folder/' # ex. - /home/pi/mystic/themes/default/scripts/hamsearch/data/
+dbFolder = '/full/path/to/your/hamsearch/datafolder/' # ex. - /home/pi/mystic/themes/default/scripts/hamsearch/data/
 
 
 # Get what we need from the EN.dat file
