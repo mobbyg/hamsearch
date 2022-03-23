@@ -13,10 +13,13 @@ import sys
 
 global callsign
 global callsignOpclass
+dbFolder = '/full/path/to/your/hamsearch/folder/' # ex. - /home/pi/mystic/themes/default/scripts/hamsearch/data/
 
+
+# Get what we need from the EN.dat file
 def lookUp(callsign):
   enOutput = ""
-  enDB = open("/home/pi/mystic/themes/default/scripts/hamsearch/EN.dat" , "r")
+  enDB = open(dbFolder + "EN.dat" , "r")
   for enline in enDB:
     enlist = enline.split("|")
     if enlist[4] == callsign:
@@ -26,9 +29,9 @@ def lookUp(callsign):
     else:
       pass
 
-
+# Get What we need from the AM.dat file
 def grabAM(callsign):
-  amDB = open("/home/pi/mystic/themes/default/scripts/hamsearch/AM.dat" , "r")
+  amDB = open(dbFolder + "AM.dat" , "r")
   for amline in amDB:
     amlist = amline.split("|")
     if amlist[4] == callsign:
@@ -38,12 +41,14 @@ def grabAM(callsign):
     else:
       pass
 
+# This function Coming Soon!
 def grabCO(callsign):
   pass
 
+# Is there database files?
 def checkDB():
-  if path.exists("EN.dat" and "AM.dat") == False:
-    write("Can't find Ham Search databases...\n|PA")
+  if path.exists(dbFolder + "EN.dat" and dbFolder + "AM.dat") == False:
+    write("Can't find HamSearch databases...\n|PA")
   else:
     pass
 
