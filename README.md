@@ -1,4 +1,4 @@
-# hamserach
+# HamSearch
 A Mystic BBS add on Python script to search database files from the FCC's ULS database. 
 
 This script is no where near complete and still kind of a hack that works. But improvements
