@@ -8,11 +8,11 @@ This script is no where near complete and still kind of a hack that works. But i
 are planned for it. Some of those improvements are:
 
  - Better Menu System
- - Event scripts to automatically download the data files from the FCC website
+ - [x] Event scripts to automatically download the data files from the FCC website (getdb.py)
  - Better search result data
  - Better search result formatting
  - About Info, to be able to see last database update, etc... 
- - Event logging
+ - [x] Event logging (Partial: Logging of db updates)
  - Better data management
 
 Read the install.txt for how to install on your Mystic BBS. 
