@@ -1,79 +1,397 @@
 #########################################################
-##      FCC AMATEUR RADIO CALLSIGN DATABASE LOOKUP     ##
-##                 a.k.a. "HAMSERACH"                  ##
-##                       v.2.1 ALPHA                   ##
-##  Copyright (c) 2022, Richard L. Gattie II, KB2MOB   ##
-##           Distributed under the BSD License         ##
+## FCC AMATEUR RADIO CALLSIGN DATABASE LOOKUP
+## a.k.a. "HAMSERACH"
+## v.3.0 ALPHA
+## Copyright (c) 2022-2026, Richard L. Gattie II, KB2MOB
+## Distributed under the BSD License
 #########################################################
 
 from mystic_bbs import *
-import os.path
 from os import path
-import sys
+import sqlite3
 
-global callsign
-global callsignOpclass
-dbFolder = '/full/path/to/your/hamsearch/datafolder/' # ex. - /home/pi/mystic/themes/default/scripts/hamsearch/data/
+# -------------------------------------------------------
+# CONFIG
+# -------------------------------------------------------
 
+# Point this to the folder that contains:
+#   EN.dat
+#   AM.dat
+#   HD.dat
+#   HS.dat
+#   hamsearch.db
+#
+# Example:
+# /home/pi/mystic/themes/default/scripts/hamsearch/data/
+DB_FOLDER = "/full/path/to/your/hamsearch/datafolder/"
 
-# Get what we need from the EN.dat file
-def lookUp(callsign):
-  enOutput = ""
-  enDB = open(dbFolder + "EN.dat" , "r")
-  for enline in enDB:
-    enlist = enline.split("|")
-    if enlist[4] == callsign:
-      enOutput = enlist[8] + "," + enlist[9] + "," + enlist[10] + "," + enlist[11] + "," + enlist[15] + "," + enlist[16] + "," + enlist[17] + "," + enlist[18]
-      enDB.close()
-      return enOutput
+SQLITE_DB = path.join(DB_FOLDER, "hamsearch.db")
+EN_FILE   = path.join(DB_FOLDER, "EN.dat")
+AM_FILE   = path.join(DB_FOLDER, "AM.dat")
+HD_FILE   = path.join(DB_FOLDER, "HD.dat")
+HS_FILE   = path.join(DB_FOLDER, "HS.dat")
+
+HEADER_FILE = "hshdr.ans"
+
+# -------------------------------------------------------
+# HELPERS
+# -------------------------------------------------------
+
+def show_header():
+    if path.exists(HEADER_FILE):
+        write("|DF" + HEADER_FILE + "|")
+    write(" v.3.0 ALPHA\n")
+
+def pause():
+    write("|PA")
+
+def normalize_callsign(raw_value):
+    if raw_value is None:
+        return ""
+    return raw_value.strip().upper()
+
+def file_mode_available():
+    return path.exists(EN_FILE) and path.exists(AM_FILE)
+
+def sqlite_mode_available():
+    return path.exists(SQLITE_DB)
+
+def check_any_database():
+    if sqlite_mode_available():
+        return True
+
+    if file_mode_available():
+        return True
+
+    writeln("")
+    writeln("|12Can't find HamSearch database files.")
+    writeln("|07Expected one of:")
+    writeln("|15SQLite: |07" + SQLITE_DB)
+    writeln("|15Flat files: |07EN.dat and AM.dat in " + DB_FOLDER)
+    writeln("")
+    writeln("|12Run getdb.py first.")
+    pause()
+    return False
+
+def safe_join(parts):
+    cleaned = []
+    for item in parts:
+        item = (item or "").strip()
+        if item != "":
+            cleaned.append(item)
+    return " ".join(cleaned)
+
+# -------------------------------------------------------
+# SQLITE LOOKUP
+# -------------------------------------------------------
+
+def lookup_sqlite(callsign):
+    conn = sqlite3.connect(SQLITE_DB)
+    conn.row_factory = sqlite3.Row
+
+    try:
+        row = conn.execute(
+            """
+            SELECT
+                l.callsign,
+                l.unique_system_identifier,
+                l.license_status,
+                l.radio_service_code,
+                l.grant_date,
+                l.expired_date,
+                l.cancellation_date,
+
+                e.entity_name,
+                e.first_name,
+                e.mi,
+                e.last_name,
+                e.suffix,
+                e.street_address,
+                e.city,
+                e.state,
+                e.zip_code,
+
+                a.operator_class,
+                a.previous_callsign,
+                a.previous_operator_class
+            FROM licenses l
+            LEFT JOIN entities e
+                ON e.unique_system_identifier = l.unique_system_identifier
+            LEFT JOIN amateur a
+                ON a.unique_system_identifier = l.unique_system_identifier
+            WHERE UPPER(l.callsign) = ?
+            LIMIT 1
+            """,
+            (callsign,)
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        history_rows = conn.execute(
+            """
+            SELECT status_code, status_text, log_date
+            FROM history_status
+            WHERE UPPER(callsign) = ?
+            ORDER BY
+                CASE
+                    WHEN log_date IS NULL OR log_date = '' THEN 1
+                    ELSE 0
+                END,
+                log_date DESC
+            """,
+            (callsign,)
+        ).fetchall()
+
+        old_calls = []
+        seen_calls = set()
+
+        if row["previous_callsign"]:
+            old_call = row["previous_callsign"].strip().upper()
+            if old_call and old_call != callsign and old_call not in seen_calls:
+                old_calls.append(old_call)
+                seen_calls.add(old_call)
+
+        # Also collect older callsigns tied to the same person/license record,
+        # where possible, from amateur table.
+        if row["unique_system_identifier"]:
+            prev_rows = conn.execute(
+                """
+                SELECT previous_callsign
+                FROM amateur
+                WHERE unique_system_identifier = ?
+                """,
+                (row["unique_system_identifier"],)
+            ).fetchall()
+
+            for prev in prev_rows:
+                prev_call = (prev["previous_callsign"] or "").strip().upper()
+                if prev_call and prev_call != callsign and prev_call not in seen_calls:
+                    old_calls.append(prev_call)
+                    seen_calls.add(prev_call)
+
+        possible_silent_key = False
+        for hist in history_rows:
+            status_text = ((hist["status_text"] or "") + " " + (hist["status_code"] or "")).upper()
+            if "DECEAS" in status_text or "SILENT" in status_text:
+                possible_silent_key = True
+                break
+
+        return {
+            "callsign": row["callsign"] or callsign,
+            "operator_class": row["operator_class"] or "Unknown",
+            "license_status": row["license_status"] or "Unknown",
+            "grant_date": row["grant_date"] or "",
+            "expired_date": row["expired_date"] or "",
+            "cancellation_date": row["cancellation_date"] or "",
+            "name": (
+                row["entity_name"]
+                or safe_join([row["first_name"], row["mi"], row["last_name"], row["suffix"]])
+            ),
+            "street_address": row["street_address"] or "",
+            "city": row["city"] or "",
+            "state": row["state"] or "",
+            "zip_code": row["zip_code"] or "",
+            "previous_callsigns": old_calls,
+            "previous_operator_class": row["previous_operator_class"] or "",
+            "possible_silent_key": possible_silent_key,
+            "history": history_rows,
+            "source": "sqlite"
+        }
+
+    finally:
+        conn.close()
+
+# -------------------------------------------------------
+# FLAT-FILE FALLBACK
+# -------------------------------------------------------
+
+def lookup_en_flat(callsign):
+    with open(EN_FILE, "r", encoding="latin-1", errors="ignore") as handle:
+        for line in handle:
+            parts = line.rstrip("\r\n").split("|")
+
+            if len(parts) > 18 and parts[4].strip().upper() == callsign:
+                return {
+                    "callsign": callsign,
+                    "name": safe_join([parts[8], parts[9], parts[10], parts[11]]),
+                    "street_address": parts[15].strip(),
+                    "city": parts[16].strip(),
+                    "state": parts[17].strip(),
+                    "zip_code": parts[18].strip(),
+                }
+
+    return None
+
+def lookup_am_flat(callsign):
+    with open(AM_FILE, "r", encoding="latin-1", errors="ignore") as handle:
+        for line in handle:
+            parts = line.rstrip("\r\n").split("|")
+
+            if len(parts) > 16 and parts[4].strip().upper() == callsign:
+                return {
+                    "operator_class": parts[5].strip() or "Unknown",
+                    "previous_callsign": parts[15].strip(),
+                    "previous_operator_class": parts[16].strip(),
+                }
+
+    return None
+
+def lookup_flat(callsign):
+    en = lookup_en_flat(callsign)
+    am = lookup_am_flat(callsign)
+
+    if en is None:
+        return None
+
+    previous_calls = []
+    previous_operator_class = ""
+
+    if am:
+        prev_call = am.get("previous_callsign", "").strip().upper()
+        if prev_call and prev_call != callsign:
+            previous_calls.append(prev_call)
+        previous_operator_class = am.get("previous_operator_class", "")
+
+    return {
+        "callsign": callsign,
+        "operator_class": (am.get("operator_class", "Unknown") if am else "Unknown"),
+        "license_status": "Unknown",
+        "grant_date": "",
+        "expired_date": "",
+        "cancellation_date": "",
+        "name": en.get("name", ""),
+        "street_address": en.get("street_address", ""),
+        "city": en.get("city", ""),
+        "state": en.get("state", ""),
+        "zip_code": en.get("zip_code", ""),
+        "previous_callsigns": previous_calls,
+        "previous_operator_class": previous_operator_class,
+        "possible_silent_key": False,
+        "history": [],
+        "source": "flat"
+    }
+
+# -------------------------------------------------------
+# DISPLAY
+# -------------------------------------------------------
+
+def display_result(result):
+    writeln("")
+    writeln(" " + result["callsign"] + " (" + result["operator_class"] + ")")
+    writeln(" " + (result["name"] or "Unknown Name"))
+
+    if result["street_address"]:
+        writeln(" " + result["street_address"])
+
+    city_line = ""
+    if result["city"]:
+        city_line += result["city"]
+    if result["state"]:
+        if city_line:
+            city_line += ", "
+        city_line += result["state"]
+    if result["zip_code"]:
+        if city_line:
+            city_line += " "
+        city_line += result["zip_code"]
+
+    if city_line:
+        writeln(" " + city_line)
+
+    writeln(" License Status : " + (result["license_status"] or "Unknown"))
+
+    if result["grant_date"]:
+        writeln(" Grant Date     : " + result["grant_date"])
+    if result["expired_date"]:
+        writeln(" Expired Date   : " + result["expired_date"])
+    if result["cancellation_date"]:
+        writeln(" Cancel Date    : " + result["cancellation_date"])
+
+    if result["previous_callsigns"]:
+        writeln(" Previous Call  : " + ", ".join(result["previous_callsigns"]))
     else:
-      pass
+        writeln(" Previous Call  : None")
 
-# Get What we need from the AM.dat file
-def grabAM(callsign):
-  amDB = open(dbFolder + "AM.dat" , "r")
-  for amline in amDB:
-    amlist = amline.split("|")
-    if amlist[4] == callsign:
-      amOutput = amlist[5] + ","  + amlist[15] + "," + amlist[16]
-      amDB.close()
-      return amOutput
+    if result["previous_operator_class"]:
+        writeln(" Previous Class : (" + result["previous_operator_class"] + ")")
     else:
-      pass
+        writeln(" Previous Class : (None)")
 
-# This function Coming Soon!
-def grabCO(callsign):
-  pass
+    if result["possible_silent_key"]:
+        writeln(" Silent Key?    : Possible match found in history")
 
-# Is there database files?
-def checkDB():
-  if path.exists(dbFolder + "EN.dat" and dbFolder + "AM.dat") == False:
-    write("Can't find HamSearch databases...\n|PA")
-  else:
-    pass
+    # Show the last few history records when SQLite data exists.
+    if result["history"]:
+        writeln("")
+        writeln(" Recent History:")
+        count = 0
+        for item in result["history"]:
+            log_date = item["log_date"] or "Unknown"
+            status_code = item["status_code"] or ""
+            status_text = item["status_text"] or ""
+            line = "  " + log_date
+            if status_code:
+                line += " | " + status_code
+            if status_text:
+                line += " | " + status_text
+            writeln(line)
+            count += 1
+            if count >= 5:
+                break
 
+def ask_search_again():
+    writeln("")
+    write(" Search again? [Y/N]: ")
+    ch = onekey("YN" + chr(13), True)
+    writeln("")
+    if ch == chr(13):
+        return True
+    return ch.upper() == "Y"
 
-write("|DFfcchdr.ans|");
-write("                              v.2.1 ALPHA\n");
-write("                          ENTER CALLSIGN: ");
-callsign = getstr(11, 6, 120, "");
-callsign = callsign.upper()
+# -------------------------------------------------------
+# MAIN
+# -------------------------------------------------------
 
-enOutput = lookUp(callsign)
-enDisplay = enOutput.split(",")
-amOutput = grabAM(callsign)
-amDisplay = amOutput.split(",")
+def run_search():
+    write(" ENTER CALLSIGN: ")
 
-if amDisplay[1] == "":
-  amDisplay[1] = "None"
-else:
-  pass
+    # Mystic docs: 2 = uppercase, +10 = themed input field
+    callsign = getstr(12, 10, 12, "")
+    callsign = normalize_callsign(callsign)
 
-writeln(" " + callsign + " (" + amOutput[0] + ")");
-writeln(" " + enDisplay[0] + " " + enDisplay[1] + " " + enDisplay[2] + " " + enDisplay[3]);
-writeln(" " + enDisplay[4]);
-writeln(" " + enDisplay[5] + ", " + enDisplay[6] + " " + enDisplay[7]);
-writeln(" Previous Callsign : " + amDisplay[1]);
-writeln(" Previous License Class : " + "(" + amDisplay[2] + ")");
+    if not callsign:
+        writeln("")
+        writeln("|12No callsign entered.")
+        return
 
-write("\nSearch complete...\n|PA");
+    result = None
+
+    if sqlite_mode_available():
+        result = lookup_sqlite(callsign)
+    elif file_mode_available():
+        result = lookup_flat(callsign)
+
+    if result is None:
+        writeln("")
+        writeln("|12No FCC record found for |07" + callsign)
+        return
+
+    display_result(result)
+
+def main():
+    if not check_any_database():
+        return
+
+    while True:
+        show_header()
+        run_search()
+        writeln("")
+        write(" Search complete...\n")
+
+        if not ask_search_again():
+            break
+
+    pause()
+
+main()
