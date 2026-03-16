@@ -1,50 +1,187 @@
 #########################################################
-##      FCC AMATEUR RADIO CALLSIGN DATABASE LOOKUP     ##
-##                 a.k.a. "HAM SERACH"                 ##
-##                       v.2 ALPHA                     ##
-##  Copyright (c) 2022, Richard L. Gattie II, KB2MOB   ##
-##           Distributed under the BSD License         ##
+## FCC AMATEUR RADIO CALLSIGN DATABASE LOOKUP
+## a.k.a. "HAMSEARCH"
+## v.3.0 ALPHA
+## Copyright (c) 2022-2026, Richard L. Gattie II, KB2MOB
+## Distributed under the BSD License
 #########################################################
 
-You can try this script out on the Radio Freqs & Geeks BBS!
+You can try HamSearch on the Radio Freqs & Geeks BBS.
+
 SSH    : radiofreqsandgeeksbbs.amigaz.org:2222
 Telnet : radiofreqsandgeeksbbs.amigaz.org:2323
-https://www.telnetbbsguide.com/bbs/radio-freqs-and-geeks/
 
---------------------------------------------------------------------------------------------
+------------------------------------------------------------
+OVERVIEW
+------------------------------------------------------------
 
-This script is no where near complete and still kind of a hack that works. But improvements
-are planned for it. Some of those improvements are:
+HamSearch is a Mystic BBS Python 3 script that looks up amateur
+radio callsigns using FCC ULS data.
 
- - Better Menu System
- - Event scripts to automatically download the data files from the FCC website
- - Better search result data
- - Better search result formatting
- - About Info, to be able to see last database update, etc... 
- - Event logging
- - Better data management
- 
-INSTALLTION INSTRUCTIONS:
+The package includes:
 
- - Create a directory in your Mystic BBS /theme/default/scripts directory to 
-   place your files.
- - Place the hamsearch.mpy, grabdb.py and hshdr.ans in the directory you just created. 
- - Download the License Record file from the FCC website at the URL 
-   below. Or run the grabdb.py script. 
- - UnZIP the FCC file and place the AM.dat and EN.dat files in a folder called
-   'data'. If you ran the grabdb script, it made it for you.
- - Edit the 'dbFolder' entry in the hamsearch.py to point to where the 'data' 
-   folder is.   
- - Add a menu item for HamSearch. Here is what I use on Radio Freqs & Geeks BBS:
+- hamserach.mpy   = Mystic search script
+- getdb.py        = FCC download / extract / SQLite build script
+- hshdr.ans       = ANSI header file
 
-  DISPLAY TEXT : [CQ] HamSerach v.2
-  Hot Key      : CQ
-  Action List  : (GZ) Execute Python 3 Script {insert complete path to the HamSearch folder you created}
+The recommended setup uses SQLite for lookups.
 
-You should now be able to access the script from your BBS's menu and do a search for a callsign. 
+------------------------------------------------------------
+INSTALLATION
+------------------------------------------------------------
 
-FCC data file can be downloaded from:
-https://data.fcc.gov/download/pub/uls/complete/l_amat.zip
- 
+1. CREATE A HAMSEARCH DIRECTORY
 
+Create a directory for HamSearch inside your Mystic scripts area.
 
+Example:
+
+/mystic/themes/default/scripts/hamsearch/
+
+2. COPY THE FILES
+
+Place these files in that directory:
+
+- hamserach.mpy
+- getdb.py
+- hshdr.ans
+
+3. RUN getdb.py
+
+Run getdb.py from the HamSearch directory on your host system.
+
+Example:
+
+python3 getdb.py
+
+This should:
+
+- download the FCC amateur ZIP file
+- create a data directory if needed
+- extract the FCC data files
+- build data/hamsearch.db
+
+After it finishes, you should have a structure similar to this:
+
+hamsearch/
+  hamserach.mpy
+  getdb.py
+  hshdr.ans
+  hamsearch.log
+  data/
+    AM.dat
+    EN.dat
+    HD.dat
+    HS.dat
+    hamsearch.db
+
+4. EDIT THE DATABASE PATH IN hamserach.mpy
+
+Open hamserach.mpy and edit the DB_FOLDER setting so it points to
+your HamSearch data directory.
+
+Example:
+
+DB_FOLDER = "/home/youruser/mystic/themes/default/scripts/hamsearch/data/"
+
+Make sure the path points to the folder that contains:
+
+- hamsearch.db
+- EN.dat
+- AM.dat
+- HD.dat
+- HS.dat
+
+5. SET FILE PERMISSIONS
+
+Make sure the Mystic process/user can read:
+
+- hamserach.mpy
+- hshdr.ans
+- the data directory
+- hamsearch.db
+- the extracted FCC .dat files
+
+6. ADD A MENU COMMAND IN MYSTIC
+
+In Mystic, add a menu item that runs the HamSearch script using the
+Python 3 MPY menu command.
+
+Use command:
+
+GZ
+
+For the script data/path, point it at hamserach.mpy according to your
+Mystic setup.
+
+Example concept:
+
+Command : GZ
+Data    : /full/path/to/hamserach.mpy
+
+7. TEST THE SCRIPT
+
+Log into your BBS and run HamSearch.
+
+Test these cases:
+
+- a valid callsign
+- an invalid callsign
+- pressing ENTER on a blank input
+- a callsign with a previous callsign, if available
+
+------------------------------------------------------------
+NOTES
+------------------------------------------------------------
+
+- The script is intended to use SQLite first for faster lookups.
+- If SQLite is missing, the script can fall back to flat FCC files.
+- Running getdb.py again later should refresh the FCC data and rebuild
+  the SQLite database.
+- hamsearch.log can be used to review update/build activity.
+
+------------------------------------------------------------
+TROUBLESHOOTING
+------------------------------------------------------------
+
+If HamSearch says it cannot find the database:
+
+- verify DB_FOLDER in hamserach.mpy
+- verify data/hamsearch.db exists
+- verify Mystic can read the files
+- verify getdb.py completed successfully
+
+If the menu item does not work:
+
+- confirm you used GZ, not GX or GY
+- confirm Mystic is configured for Python 3 MPY scripts
+- confirm the script path is correct
+
+If searches fail:
+
+- re-run getdb.py
+- inspect hamsearch.log
+- verify the FCC files were extracted into the data directory
+
+------------------------------------------------------------
+FUTURE CLEANUP
+------------------------------------------------------------
+
+The script filename in the repo is currently:
+
+hamserach.mpy
+
+That spelling is preserved here for compatibility with the current
+repository layout. If the repo is later cleaned up and renamed to:
+
+hamsearch.mpy
+
+then be sure to update:
+
+- the Mystic menu entry
+- this install file
+- any documentation that references the script name
+
+------------------------------------------------------------
+73!
+------------------------------------------------------------
